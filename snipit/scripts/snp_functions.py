@@ -16,6 +16,9 @@ from matplotlib import pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.patches import Polygon
 
+# imports from this module
+from snipit.scripts import vcf_functions
+
 colour_list = ["lightgrey","white"]
 colour_cycle = cycle(colour_list)
 END_FORMATTING = '\033[0m'
@@ -198,12 +201,49 @@ def find_ambiguities(alignment, snp_dict):
 
     return amb_dict
 
-def make_graph(num_seqs,num_snps,amb_dict,snp_records,output,label_map,colour_dict,length,width,height,size_option,flip_vertical=False,included_positions=None,excluded_positions=None,exclude_ambig_pos=False):
+def get_variant_annotations(annotation_path):
+    if annotation_path.endswith(".vcf"):
+        return vcf_functions.parse_vcf(annotation_path)
+    if annotation_path.endswith(".json"):
+        return get_variants_from_nextclade_json(annotation_path)
+
+def get_variants_from_nextclade_json(json_path):
+    import json
+
+    def incs(s):
+        return int(s)+1
+
+    variant_info = {}
+    with open(json_path) as f:
+        data = json.load(f)
+        for item in data["results"]:
+            seq_var_info={}
+
+            for sub in item["substitutions"]:
+                if len(sub["aaSubstitutions"])>0:
+                    for aa_sub in sub["aaSubstitutions"]:
+                        seq_var_info[incs(sub["pos"])]=(aa_sub["gene"],aa_sub["refAA"]+str(incs(aa_sub["codon"]))+aa_sub["queryAA"])
+                else:
+                    seq_var_info[incs(sub["pos"])]=("","")
+
+            variant_info[item["seqName"]]=seq_var_info
+
+    return variant_info
+
+
+def make_graph(num_seqs,num_snps,amb_dict,snp_records,output,label_map,colour_dict,length,width,height,size_option,flip_vertical=False,included_positions=None,excluded_positions=None,exclude_ambig_pos=False,variant_annotation_file=None):
     y_level = 0
     ref_vars = {}
     snp_dict = collections.defaultdict(list)
     included_positions = set(chain.from_iterable(included_positions)) if included_positions is not None else set()
     excluded_positions  = set(chain.from_iterable(excluded_positions)) if excluded_positions is not None else set()
+
+    if variant_annotation_file is not None:
+        variant_annotations = get_variant_annotations(variant_annotation_file)
+    else:
+        variant_annotations = {}
+
+    print(variant_annotations)
 
     for record in snp_records:
 
@@ -221,8 +261,20 @@ def make_graph(num_seqs,num_snps,amb_dict,snp_records,output,label_map,colour_di
             base = snp[-1]
             ref = snp[-2]
             ref_vars[x_position]=ref
-            # Add name of record, ref, SNP in record, y_level
-            snp_dict[x_position].append((record, ref, base, y_level))
+            note=None
+            if base!=ref:
+                if variant_annotation_file.endswith(".vcf"):
+                    note = variant_annotations[x_position][base]
+                if variant_annotation_file.endswith(".json"):
+                    #print(f"record {record}")
+                    #print(f"x_position {x_position}")
+                    try:
+                        note,note2 = variant_annotations[record][x_position]
+                    except:
+                        note,note2 = ("","")
+                #note="{aa_ref}{aa_pos}{aa_alt}".format(aa_ref=,aa_pos=,aa_alt=)
+            # Add name of record, ref, SNP in record, y_level, note
+            snp_dict[x_position].append((record, ref, base, y_level, note, note2))
 
         # if there are ambiguities in that record, add them to the snp dict too
         if record in amb_dict:
@@ -237,8 +289,12 @@ def make_graph(num_seqs,num_snps,amb_dict,snp_records,output,label_map,colour_di
                     base = amb[-1]
                     ref = amb[-2]
                     ref_vars[x_position]=ref
-                    # Add name of record, ref, SNP in record, y_level
-                    snp_dict[x_position].append((record, ref, base, y_level))
+                    note=None
+                    note2=None
+                    #if base!=ref:
+                    #    note=""
+                    # Add name of record, ref, SNP in record, y_level, note
+                    snp_dict[x_position].append((record, ref, base, y_level, note, note2))
 
     # gather the positions that are not explicitly excluded,
     # but are not among those to be included
@@ -310,6 +366,9 @@ def make_graph(num_seqs,num_snps,amb_dict,snp_records,output,label_map,colour_di
         # for each record add the name to the left hand side
         ax.text(-50, y_level, label_map[record], size=9, ha="right", va="center")
 
+    top_polygon = y_inc * -0.7
+    bottom_polygon = y_inc * -1.7
+
     position = 0
     for snp in sorted(snp_dict):
         position += spacing
@@ -322,23 +381,33 @@ def make_graph(num_seqs,num_snps,amb_dict,snp_records,output,label_map,colour_di
         left_of_box = position-(0.4*spacing)
         right_of_box = position+(0.4*spacing)
 
-        top_polygon = y_inc * -0.7
-        bottom_polygon = y_inc * -1.7
-
         for sequence in snp_dict[snp]:
             
-            name,ref,var,y_pos = sequence
+            name,ref,var,y_pos,note,note2 = sequence
             bottom_of_box = (y_pos*y_inc)-(0.5*y_inc)
+            top_of_box = (y_pos*y_inc)+(0.5*y_inc)
             # draw box for snp
-            if var in colour_dict:
-                rect = patches.Rectangle((left_of_box,bottom_of_box),spacing*0.8,  y_inc,alpha=0.5, fill=True, edgecolor='none',facecolor=colour_dict[var.upper()])
-            else:
-                rect = patches.Rectangle((left_of_box,bottom_of_box), spacing*0.8,  y_inc,alpha=0.5, fill=True, edgecolor='none',facecolor="dimgrey")
-            
+            #if var in colour_dict:
+            #    rect = patches.Rectangle((left_of_box,bottom_of_box), spacing*0.8,  y_inc,alpha=0.5, fill=True, edgecolor='none',facecolor=colour_dict[var.upper()])
+            #else:
+            #    rect = patches.Rectangle((left_of_box,bottom_of_box), spacing*0.8,  y_inc,alpha=0.5, fill=True, edgecolor='none',facecolor="dimgrey")
+            rect = patches.Rectangle((left_of_box,bottom_of_box), spacing*0.8, y_inc, alpha=0.5, fill=True, edgecolor='none',facecolor=colour_dict.get(var.upper(),"dimgrey"))
             ax.add_patch(rect)
+            
 
             # sequence variant text
-            ax.text(position, y_pos*y_inc, var, size=9, ha="center", va="center")
+            ax.text(position, y_pos*y_inc, var, size=9, fontweight="bold", ha="center", va="center")
+            
+            if note:
+                #rect = patches.Rectangle((left_of_box,top_of_box if not flip_vertical else top_of_box), spacing*0.8, y_inc*.5, alpha=0.5, fill=True, edgecolor='none',facecolor="black")
+                #ax.add_patch(rect)
+                # horizontal variant text
+                #ax.text(position, bottom_of_box if not flip_vertical else (bottom_of_box+(top_of_box*2))/3.0, note, size=7, color="black", alpha=0.8, ha="center", va="top" if flip_vertical else "bottom")
+                ax.text(position, top_of_box-(0.1*y_inc) if not flip_vertical else bottom_of_box+(0.1*y_inc), note, size=7, color="black", alpha=0.4, ha="center", va="top")
+            if note2:
+                ax.text(position, bottom_of_box+(0.1*y_inc) if not flip_vertical else top_of_box-(0.1*y_inc), note2, size=7, color="black", alpha=0.75, ha="center", va="bottom")
+                # vertical variant text
+                #ax.text(right_of_box, y_pos*y_inc, note, rotation="vertical", size=7, color="black", alpha=0.4, ha="right", va="center" if flip_vertical else "bottom")
 
         # reference variant text
         ax.text(position, y_inc * -0.2, ref, size=9, ha="center", va="center") 

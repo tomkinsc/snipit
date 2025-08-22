@@ -65,6 +65,8 @@ def main(sysargs = sys.argv[1:]):
     parser.add_argument("--exclude-ambig-pos",dest="exclude_ambig_pos",action='store_true',help="Exclude positions with ambig base in any sequences. Considered after '--include-positions'")
 
 
+    parser.add_argument('--annotations',action="store",dest="variant_annotation_file",help="File with SNP annotations. Default: vcf file with snpEff annotations")
+
     parser.add_argument("-c","--colour-palette",dest="colour_palette",action="store",help="Specify colour palette. Options: primary, classic, purine-pyrimidine, greyscale, wes, verity",default="classic")
 
 
@@ -102,7 +104,7 @@ def main(sysargs = sys.argv[1:]):
     sfunks.check_format(args.format)
     sfunks.check_size_option(args.size_option)
 
-    sfunks.make_graph(num_seqs,num_snps,record_ambs,record_snps,output,label_map,colours,length,args.width,args.height,args.size_option,args.flip_vertical,args.included_positions,args.excluded_positions,args.exclude_ambig_pos)
+    sfunks.make_graph(num_seqs,num_snps,record_ambs,record_snps,output,label_map,colours,length,args.width,args.height,args.size_option,args.flip_vertical,args.included_positions,args.excluded_positions,args.exclude_ambig_pos,args.variant_annotation_file)
 
 if __name__ == '__main__':
     main()

@@ -12,7 +12,8 @@ setup(name='snipit',
       scripts=["snipit/scripts/snp_functions.py"],
       install_requires=[
             "biopython>=1.70",
-            "matplotlib>=3.2.1"
+            "matplotlib>=3.2.1",
+            "pyvcf>=0.6.8"
         ],
       description='snipit',
       url='https://github.com/aineniamh/snipit',
